@@ -510,6 +510,9 @@ def evaluate(function: str, params: Iterable[str] = (), company: str | None = No
 # dict -> Tally XML (used by every write tool)
 # --------------------------------------------------------------------------
 
+_TAG_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.:\-]*")
+
+
 def to_xml(tag: str, value: Any, attrs: dict[str, str] | None = None) -> str:
     """Turn plain data into Tally XML.
 
@@ -519,6 +522,8 @@ def to_xml(tag: str, value: Any, attrs: dict[str, str] | None = None) -> str:
     * date  -> YYYYMMDD
     """
     tag = tag.upper()
+    if not _TAG_NAME.fullmatch(tag):
+        raise TallyError(f"'{tag}' is not a valid Tally field name. Use letters, digits, '.', '_' or '-'.")
     attributes = "".join(f' {k}="{escape(str(v), {chr(34): "&quot;"})}"' for k, v in (attrs or {}).items())
     if isinstance(value, list):
         return "".join(to_xml(tag, item) for item in value)

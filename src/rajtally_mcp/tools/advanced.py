@@ -264,8 +264,8 @@ def register(mcp: Any) -> None:
         text = xml.strip()
         if not text.upper().startswith("<ENVELOPE"):
             raise TallyError("The request must be a complete <ENVELOPE>...</ENVELOPE>.")
-        is_import = bool(re.search(r"<TALLYREQUEST>\s*Import", text, re.IGNORECASE))
-        removes = bool(re.search(r"ACTION\s*=\s*[\"'](Delete|Cancel)[\"']", text, re.IGNORECASE))
+        is_import = core.is_import(text)
+        removes = core.is_destructive(text)
         if is_import or removes:
             core.require_write()
             if removes:

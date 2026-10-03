@@ -9,6 +9,7 @@ from .. import builders, core
 from .. import tally_xml as tx
 from ..tally_xml import TallyError
 from . import DELETE, READ, WRITE
+from .gst import check_gstin
 
 
 def send_vouchers(xml: str, dry_run: bool, company: str | None, summary: dict[str, Any] | None = None
@@ -377,6 +378,10 @@ def register(mcp: Any) -> None:
         def ledger_xml(row: dict[str, Any]) -> str:
             name, alias = row.pop("name"), row.pop("alias", None)
             row["parent"] = row.pop("group", row.pop("parent", None))
+            if row.get("gstin"):  # same check as tally_create_ledger
+                verdict = check_gstin(row["gstin"])
+                if not verdict["valid"]:
+                    raise TallyError(f"GSTIN {row['gstin']} looks wrong: {verdict['problem']}")
             if row.get("address") or row.get("state") or row.get("gstin"):
                 row.setdefault("mailing_name", name)
             row.setdefault("applicable_from", core.books_from(company))
@@ -402,21 +407,29 @@ def register(mcp: Any) -> None:
         return report
 
     @mcp.tool(annotations=WRITE)
-    def tally_import_xml(xml: str, kind: str = "vouchers", dry_run: bool = False,
+    def tally_import_xml(xml: str, kind: str = "vouchers", confirm: bool = False, dry_run: bool = False,
                          company: str | None = None) -> dict[str, Any]:
         """Import ready-made Tally XML objects (the content that goes inside <TALLYMESSAGE>): one or more
         <VOUCHER ...> or master elements such as <LEDGER ...>. For anything the other write tools do not
         cover - sales / purchase orders, delivery notes, payroll vouchers, price lists, budgets.
-        kind: 'vouchers' or 'masters'."""
+        kind: 'vouchers' or 'masters'.
+        XML that deletes or cancels anything (ACTION="Delete" / "Cancel") needs access = 'full' and
+        confirm=true, like the dedicated delete tools."""
         core.require_write()
         target = "Vouchers" if kind.strip().lower().startswith("v") else "All Masters"
         text = xml.strip()
         if "<ENVELOPE" in text.upper():
             raise TallyError("Pass only the objects (e.g. <VOUCHER>...</VOUCHER>), not a full <ENVELOPE>. "
                              "To send a complete envelope use tally_raw_xml.")
-        if 'ACTION="Delete"' in text or "ACTION='Delete'" in text or 'ACTION="Cancel"' in text:
-            core.require_full(True)
+        destructive = core.is_destructive(text)
+        if destructive and not dry_run:
+            core.require_full(confirm)
         if dry_run:
-            return {"dry_run": True, "nothing_changed": True, "xml": tx.import_xml(text, target, company)}
+            preview: dict[str, Any] = {"dry_run": True, "nothing_changed": True,
+                                       "xml": tx.import_xml(text, target, company)}
+            if destructive:
+                preview["warning"] = ("This XML deletes or cancels data. Posting it needs access = 'full' "
+                                      "and confirm=true.")
+            return preview
         return tx.import_data(text, target, company)
 

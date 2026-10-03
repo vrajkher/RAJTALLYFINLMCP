@@ -374,9 +374,9 @@ Arguments: `vouchers`?, `ledgers`?, `stock_items`?, `stop_on_error`?  (`?` = opt
 
 ### `tally_import_xml`  (write)
 
-Import ready-made Tally XML objects (the content that goes inside <TALLYMESSAGE>): one or more <VOUCHER ...> or master elements such as <LEDGER ...>. For anything the other write tools do not cover - sales / purchase orders, delivery notes, payroll vouchers, price lists, budgets. kind: 'vouchers' or 'masters'.
+Import ready-made Tally XML objects (the content that goes inside <TALLYMESSAGE>): one or more <VOUCHER ...> or master elements such as <LEDGER ...>. For anything the other write tools do not cover - sales / purchase orders, delivery notes, payroll vouchers, price lists, budgets. kind: 'vouchers' or 'masters'. XML that deletes or cancels anything (ACTION="Delete" / "Cancel") needs access = 'full' and confirm=true, like the dedicated delete tools.
 
-Arguments: `xml`, `kind`?  (`?` = optional)
+Arguments: `xml`, `kind`?, `confirm`?  (`?` = optional)
 
 ## Step 6 - Remove (needs access = full)
 

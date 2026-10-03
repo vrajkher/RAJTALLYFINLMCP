@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import html
+import re
 import xml.etree.ElementTree as ET
 from decimal import Decimal
 from typing import Any
@@ -37,6 +39,43 @@ def require_full(confirm: bool) -> None:
         )
     if not confirm:
         raise TallyError("This permanently changes Tally data. Call again with confirm=true to go ahead.")
+
+
+_DESTRUCTIVE = ("delete", "cancel")
+_ACTION_TEXT = re.compile(r"action\s*=\s*[\"']\s*(delete|cancel)\s*[\"']", re.IGNORECASE)
+
+
+def is_destructive(xml: str) -> bool:
+    """Does this Tally XML delete or cancel anything?
+
+    The XML is parsed and every ACTION attribute inspected, so spacing, quote style, letter case and
+    character references (ACTION = 'cancel', ACTION="&#68;elete") cannot slip past. If it cannot be
+    parsed, the decoded text is searched instead.
+    """
+    body = re.sub(r"<\?xml[^>]*\?>", "", tx._clean(xml))
+    try:
+        root = ET.fromstring(f'<ROOT xmlns:UDF="TallyUDF">{body}</ROOT>')
+    except ET.ParseError:
+        return bool(_ACTION_TEXT.search(html.unescape(xml)))
+    return any(key.lower() == "action" and str(value).strip().lower() in _DESTRUCTIVE
+               for element in root.iter() for key, value in element.attrib.items())
+
+
+_IMPORT_TEXT = re.compile(r"<\s*tallyrequest[^>]*>\s*import|<\s*importdata\b", re.IGNORECASE)
+
+
+def is_import(xml: str) -> bool:
+    """Is this a request that writes to Tally (an Import), however the envelope is spelled?"""
+    body = re.sub(r"<\?xml[^>]*\?>", "", tx._clean(xml))
+    try:
+        root = ET.fromstring(f'<ROOT xmlns:UDF="TallyUDF">{body}</ROOT>')
+    except ET.ParseError:
+        return bool(_IMPORT_TEXT.search(html.unescape(xml)))
+    for element in root.iter():
+        tag = element.tag.upper()
+        if tag == "IMPORTDATA" or (tag == "TALLYREQUEST" and (element.text or "").strip().lower().startswith("import")):
+            return True
+    return False
 
 
 _books_from: dict[tuple[str, str], str] = {}

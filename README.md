@@ -60,7 +60,37 @@ To also use Tally's ODBC driver (Windows): `pip install pyodbc`.
 
 ### Step 3 — Add it to your assistant
 
-**Claude Desktop** — `Settings` → `Developer` → `Edit Config`, then add:
+Every app runs the same command, `rajtally-mcp`; only the place you type it differs. Find your app
+under [Use it with different apps](#use-it-with-different-apps) just below.
+
+### Step 4 — Check the connection
+
+```bash
+rajtally-mcp --check
+```
+
+This prints what Tally answered: product, open companies, the active company. Then just ask your
+assistant: *"Check the Tally connection and show me the trial balance."*
+
+---
+
+## Use it with different apps
+
+| App | How to add | Section |
+| --- | --- | --- |
+| Claude Desktop | paste a block into its config file | [A](#a-claude-desktop) |
+| Claude Code | one command | [B](#b-claude-code) |
+| ChatGPT / Codex | install as a plugin, or one command | [C](#c-chatgpt--codex) |
+| Cursor, Windsurf, Gemini CLI, Cline | paste the same block as Claude Desktop | [D](#d-cursor-windsurf-gemini-cli-cline) |
+| VS Code (GitHub Copilot) | paste a block into `.vscode/mcp.json` | [E](#e-vs-code-github-copilot) |
+| Any app that connects by URL | run in HTTP mode | [F](#f-any-app-that-connects-by-url-http-mode) |
+
+Menu names move between app versions; if one below is not where it says, look for "MCP servers" in
+that app's settings.
+
+### A. Claude Desktop
+
+`Settings` → `Developer` → `Edit Config`, add this, then restart Claude Desktop:
 
 ```json
 {
@@ -74,13 +104,15 @@ To also use Tally's ODBC driver (Windows): `pip install pyodbc`.
 
 If Windows cannot find `rajtally-mcp`, use `"command": "python", "args": ["-m", "rajtally_mcp"]` instead.
 
-**Claude Code**
+### B. Claude Code
 
 ```bash
 claude mcp add rajtally -- rajtally-mcp
 ```
 
-**ChatGPT / Codex (as a plugin)** — this repository is a plugin marketplace:
+### C. ChatGPT / Codex
+
+**As a plugin (recommended).** This repository is a plugin marketplace:
 
 ```bash
 codex plugin marketplace add vrajkher/RAJTALLYFINLMCP
@@ -89,22 +121,106 @@ codex plugin marketplace add vrajkher/RAJTALLYFINLMCP
 Then install **RAJ Tally FINL** from the plugin list. The plugin starts the server with
 [`uvx`](https://docs.astral.sh/uv/), so only `uv` needs to be installed. Host, port, company and
 access level are exposed as structured plugin settings, and typing `@` in the composer searches your
-ledgers and stock items (where the app supports those extensions).
+ledgers and stock items (where the app supports those extensions). On first use the plugin's
+onboarding skill walks through connection, company and access level.
 
-**No install at all** (any client, needs `uv`):
+**As a plain MCP server.**
+
+```bash
+codex mcp add rajtally -- rajtally-mcp
+```
+
+### D. Cursor, Windsurf, Gemini CLI, Cline
+
+These all read the same `mcpServers` block shown for Claude Desktop. Put it in:
+
+| App | File |
+| --- | --- |
+| Cursor | `~/.cursor/mcp.json` (or `.cursor/mcp.json` inside a project) |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Gemini CLI | `~/.gemini/settings.json` |
+| Cline | `MCP Servers` → `Configure` → `cline_mcp_settings.json` |
+
+### E. VS Code (GitHub Copilot)
+
+Create `.vscode/mcp.json` in your folder (note the key is `servers`, not `mcpServers`):
+
+```json
+{
+  "servers": {
+    "rajtally": {
+      "type": "stdio",
+      "command": "rajtally-mcp"
+    }
+  }
+}
+```
+
+### F. Any app that connects by URL (HTTP mode)
+
+```bash
+rajtally-mcp --http
+```
+
+The server then listens at `http://127.0.0.1:8000/mcp`. Give that URL to the app.
+
+It listens on this computer only and has no login of its own. Do not put it on the internet (for
+example through a tunnel) — anyone who reached it could read and post to your books.
+
+### Without installing anything
+
+Any app that takes a command can run the server straight from GitHub, if `uv` is installed:
 
 ```json
 { "command": "uvx", "args": ["--from", "git+https://github.com/vrajkher/RAJTALLYFINLMCP", "rajtally-mcp"] }
 ```
 
-### Step 4 — Check the connection
+---
 
-```bash
-rajtally-mcp --check
+## Use it in different situations
+
+| Situation | What to do |
+| --- | --- |
+| **Tally is on another computer** (server PC, another cabin) | On that PC do Step 1 and allow port 9000 in its firewall. On yours: `rajtally-mcp --host 192.168.1.10 --check`, then set `TALLY_HOST` (see below) |
+| **Tally uses a different port** | `rajtally-mcp --port 9001`, or `TALLY_PORT=9001` |
+| **Several companies open at once** | Ask *"use company ABC Traders"* (`tally_use_company`), or pass `company` to any single tool to look at another company without switching |
+| **A different client's books each time** (CA practice) | Leave `company` blank: the server follows whichever company is active in Tally |
+| **Tally.ERP 9, or TallyPrime older than release 3** | Set `gstSchema` to `erp9` so GST details on new ledgers and stock items use the older layout |
+| **Staff or articles should only look, not post** | Start with `--access read_only`. Every write tool then refuses, and nothing is sent to Tally |
+| **You want to allow delete and cancel** | Set access to `full`. Each delete still needs `confirm: true` |
+| **Posting many entries** (bank statement, Excel sheet) | Give the assistant the file and ask it to use `tally_bulk_import` with `dry_run` first; failures come back row by row |
+| **A big company where reports are slow** | Ask for one month at a time: *"GST summary for September 2026"* |
+| **No Tally on this computer** | `rajtally-mcp --demo` starts a pretend Tally to practise on |
+
+To pass settings from an app's config file, add an `env` block:
+
+```json
+{
+  "mcpServers": {
+    "rajtally": {
+      "command": "rajtally-mcp",
+      "env": { "TALLY_HOST": "192.168.1.10", "TALLY_PORT": "9000", "TALLY_ACCESS": "read_only" }
+    }
+  }
+}
 ```
 
-This prints what Tally answered: product, open companies, the active company. Then just ask your
-assistant: *"Check the Tally connection and show me the trial balance."*
+### Things to ask
+
+| You want | Ask |
+| --- | --- |
+| A quick health check | *"Check the Tally connection and tell me which company is open."* |
+| Books at a glance | *"Show the trial balance and tell me if it tallies."* |
+| Collections | *"Who owes us money for more than 90 days? Sort by amount."* |
+| A party's account | *"Give me the ledger statement of Shree Ganesh Hardware for this year."* |
+| GST review | *"GST summary for September, and list invoices with a missing or wrong GSTIN."* |
+| TDS working | *"TDS deducted and deposited this quarter, party-wise with PAN."* |
+| Bank | *"Reconcile HDFC Bank: what is not yet cleared?"* |
+| Audit | *"Run the audit checks for the year and explain each finding."* |
+| An entry | *"Book rent of 15,000 paid today from HDFC by cheque 000123. Show me before posting."* |
+| An invoice | *"Make a sales invoice to Patel Engineering for 5 Ball Valve 2 inch at 460, IGST 18%."* |
+| A new party | *"Create customer Krishna Traders under Sundry Debtors, GSTIN 24AAACC1206D1ZM, Gujarat."* |
+| Raw data | *"Run: SELECT $Name, $ClosingBalance FROM Ledger WHERE $Parent = 'Sundry Creditors'"* |
 
 ---
 
@@ -191,6 +307,8 @@ Your books are protected by three layers:
 
 - Change the level with `tally_settings_update`, or start with `rajtally-mcp --access read_only`.
 - Every write tool accepts `dry_run: true`.
+- The generic XML tools (`tally_import_xml`, `tally_raw_xml`) inspect what they are given: anything
+  that deletes or cancels needs `full` access and an explicit confirmation, however it is spelled.
 - Vouchers are checked before sending: debits must equal credits, and a GSTIN must pass its check
   digit. Tally's own error (for example *"Ledger 'X' does not exist!"*) is returned word for word.
 
@@ -232,7 +350,7 @@ Point your assistant at it and try every tool, including the write tools, with n
 
 Being straight about this matters for accounting software.
 
-**Tested:** 60 automated tests run every tool through the real MCP protocol (in-process and over
+**Tested:** 75 automated tests run every tool through the real MCP protocol (in-process and over
 stdio) against the built-in pretend Tally: reads, reports that tie out (trial balance and balance
 sheet differences are zero), every write path, access levels, dry runs, Gujarati text, and both
 OpenAI extensions. Run them with `pip install -e ".[dev]" && pytest`.
@@ -293,7 +411,7 @@ src/rajtally_mcp/
   demo_tally.py    the pretend Tally
 plugins/rajtally/  ChatGPT / Codex plugin: manifest, skills, icons
 docs/TOOLS.md      every tool and its arguments
-tests/             60 tests
+tests/             75 tests
 ```
 
 ## License

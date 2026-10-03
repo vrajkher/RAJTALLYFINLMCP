@@ -14,6 +14,7 @@ from conftest import ToolFailed
 def test_tool_list_is_complete_and_described(call):
     tools = {t.name: t for t in call.tools()}
     assert len(tools) == 53
+    assert "confirm" in tools["tally_import_xml"].input_schema["properties"]
     for name, tool in tools.items():
         assert tool.description and len(tool.description) > 30, name
         assert re.fullmatch(r"[a-z0-9_]+", name), name  # safe for every MCP client
@@ -407,6 +408,87 @@ def test_raw_xml_and_import_xml(call):
         call("tally_import_xml", xml=envelope)
     with pytest.raises(ToolFailed, match="need access = 'full'"):
         call("tally_import_xml", kind="masters", xml='<GODOWN NAME="Shop" ACTION="Delete"/>')
+
+
+DESTRUCTIVE_SPELLINGS = [
+    '<GODOWN NAME="Main Location" ACTION = "Delete"/>',
+    "<GODOWN NAME='Main Location' ACTION='Cancel'/>",
+    '<GODOWN NAME="Main Location" ACTION="delete"></GODOWN>',
+    '<GODOWN NAME="Main Location" action="DELETE"/>',
+    '<GODOWN NAME="Main Location" ACTION="&#68;elete"/>',
+    '<GODOWN NAME="Main Location" ACTION=" Cancel "/>',
+    '<GODOWN NAME="Main Location" ACTION="Delete"><UDF:X.LIST>1</UDF:X.LIST></GODOWN>',
+    '<GODOWN NAME="Main Location"\n   ACTION\n=\n"Delete"/> <BROKEN',
+]
+
+
+@pytest.mark.parametrize("xml", DESTRUCTIVE_SPELLINGS)
+def test_import_xml_spots_every_spelling_of_delete_and_cancel(call, tally, xml):
+    before = len(tally.requests)
+    with pytest.raises(ToolFailed, match="need access = 'full'"):
+        call("tally_import_xml", kind="masters", xml=xml)
+    with pytest.raises(ToolFailed, match="need access = 'full'"):
+        call("tally_import_xml", kind="masters", xml=xml, confirm=True)
+    envelope = ("<ENVELOPE><HEADER><TALLYREQUEST>Import</TALLYREQUEST><TYPE>Data</TYPE><ID>All Masters</ID>"
+                f"</HEADER><BODY><DATA><TALLYMESSAGE>{xml}</TALLYMESSAGE></DATA></BODY></ENVELOPE>")
+    with pytest.raises(ToolFailed, match="need access = 'full'"):
+        call("tally_raw_xml", xml=envelope, confirm_write=True)
+    assert len(tally.requests) == before  # nothing reached Tally
+
+
+def test_import_xml_delete_needs_the_callers_confirmation(call):
+    xml = "<GODOWN NAME='Main Location' ACTION='Delete'/>"
+    call("tally_settings_update", set={"access": "full"})
+    with pytest.raises(ToolFailed, match="confirm=true"):
+        call("tally_import_xml", kind="masters", xml=xml)
+    preview = call("tally_import_xml", kind="masters", xml=xml, dry_run=True)
+    assert preview["nothing_changed"] is True and "deletes or cancels" in preview["warning"]
+    assert call("tally_list_masters", master_type="godown")["total"] == 1
+    assert call("tally_import_xml", kind="masters", xml=xml, confirm=True)["deleted"] == 1
+    assert call("tally_list_masters", master_type="godown")["total"] == 0
+    harmless = "<GODOWN NAME='Delete Me Later' ACTION='Create'><NAME>Delete Me Later</NAME></GODOWN>"
+    assert "warning" not in call("tally_import_xml", kind="masters", xml=harmless, dry_run=True)
+
+
+@pytest.mark.parametrize("header", [
+    "<TALLYREQUEST>Import</TALLYREQUEST>", "<TALLYREQUEST TYPE='x'>  import data</TALLYREQUEST>",
+    "<tallyrequest>IMPORT</tallyrequest>", "<TALLYREQUEST>&#73;mport</TALLYREQUEST>",
+])
+def test_raw_xml_recognises_every_spelling_of_an_import(call, tally, header):
+    envelope = (f"<ENVELOPE><HEADER><VERSION>1</VERSION>{header}<TYPE>Data</TYPE><ID>All Masters</ID></HEADER>"
+                "<BODY><DATA><TALLYMESSAGE><GODOWN NAME='Shop' ACTION='Create'/></TALLYMESSAGE></DATA></BODY>"
+                "</ENVELOPE>")
+    with pytest.raises(ToolFailed, match="confirm_write=true"):
+        call("tally_raw_xml", xml=envelope)
+    call("tally_settings_update", set={"access": "read_only"})
+    before = len(tally.requests)
+    with pytest.raises(ToolFailed, match="read_only mode"):
+        call("tally_raw_xml", xml=envelope, confirm_write=True)
+    assert len(tally.requests) == before
+
+
+def test_bulk_import_checks_gstin_like_create_ledger(call):
+    result = call("tally_bulk_import", ledgers=[
+        {"name": "Good GSTIN", "group": "Sundry Debtors", "gstin": "24AAACC1206D1ZM"},
+        {"name": "Bad GSTIN", "group": "Sundry Debtors", "gstin": "24AAACC1206D1ZX"},
+        {"name": "No GSTIN", "group": "Sundry Debtors"}])
+    assert result["posted"] == 2 and result["failed"] == 1
+    assert result["failures"] == [{"record": "ledger #2",
+                                   "problem": "GSTIN 24AAACC1206D1ZX looks wrong: Check character should be "
+                                              "'M', found 'X'. Likely a typing error."}]
+    assert call("tally_search", text="GSTIN")["total"] == 2
+    assert call("tally_bulk_import", dry_run=True, ledgers=[
+        {"name": "Bad", "group": "Sundry Debtors", "gstin": "123"}])["failed"] == 1
+
+
+def test_field_names_cannot_smuggle_xml(call):
+    for fields in ({'PARENT><LEDGER NAME="Cash" ACTION="Delete"/': "x"}, {"BAD TAG": "x"},
+                   {"ADDRESS.LIST": {"A><B": "x"}}):
+        with pytest.raises(ToolFailed, match="not a valid Tally field name"):
+            call("tally_save_master", master_type="godown", name="Shop", fields=fields, dry_run=True)
+    ok = call("tally_save_master", master_type="godown", name="Shop", dry_run=True,
+              fields={"ADDRESS.LIST": {"ADDRESS": ["a", "b"]}, "UDF:MYFIELD": "1"})
+    assert "<ADDRESS.LIST><ADDRESS>a</ADDRESS><ADDRESS>b</ADDRESS></ADDRESS.LIST>" in ok["xml"]
 
 
 def test_gujarati_names_survive_the_round_trip(call):
