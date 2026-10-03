@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rajtally-mcp"
+version = "1.0.0"
+description = "MCP server for Tally.ERP 9 and TallyPrime: read, write and report over XML and ODBC."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Vanrajsinh (AccoTechAI)" }]
+keywords = ["tally", "tallyprime", "tally erp 9", "mcp", "odbc", "gst", "accounting"]
+dependencies = [
+  "mcp>=2.0.0",
+  "openai-mcp-extensions>=0.1.0",
+]
+
+[project.optional-dependencies]
+odbc = ["pyodbc>=5.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+rajtally-mcp = "rajtally_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

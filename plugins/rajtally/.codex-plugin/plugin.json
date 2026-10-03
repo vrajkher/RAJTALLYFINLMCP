@@ -1,0 +1,31 @@
+{
+  "name": "rajtally",
+  "version": "1.0.0",
+  "description": "Read, report on and post to Tally.ERP 9 / TallyPrime from chat.",
+  "author": {
+    "name": "vrajkher"
+  },
+  "homepage": "https://github.com/vrajkher/RAJTALLYFINLMCP",
+  "repository": "https://github.com/vrajkher/RAJTALLYFINLMCP",
+  "license": "MIT",
+  "keywords": ["tally", "tallyprime", "accounting", "gst", "tds", "odbc"],
+  "skills": "./skills/",
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/onboarding/SKILL.md"
+    }
+  },
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "RAJ Tally FINL",
+    "shortDescription": "Read, report on and post to Tally",
+    "longDescription": "Connects to Tally.ERP 9 or TallyPrime running on your computer. Read ledgers, vouchers and stock; get trial balance, balance sheet, profit and loss, outstandings, GST and TDS working papers, bank reconciliation and audit checks; create and edit masters, vouchers and GST invoices with a dry-run preview and access levels.",
+    "developerName": "vrajkher",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg",
+    "logoDark": "./assets/icon-dark.svg",
+    "defaultPrompt": ["@RAJ Tally FINL check the Tally connection and show the trial balance."]
+  }
+}

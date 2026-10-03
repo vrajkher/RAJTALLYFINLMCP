@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rajtally": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/vrajkher/RAJTALLYFINLMCP", "rajtally-mcp"]
+    }
+  }
+}
