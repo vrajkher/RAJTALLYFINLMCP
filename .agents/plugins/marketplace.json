@@ -1,0 +1,20 @@
+{
+  "name": "rajtally-plugins",
+  "interface": {
+    "displayName": "RAJ Tally FINL"
+  },
+  "plugins": [
+    {
+      "name": "rajtally",
+      "source": {
+        "source": "local",
+        "path": "./plugins/rajtally"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
