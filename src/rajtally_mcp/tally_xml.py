@@ -317,11 +317,23 @@ def yes(value: str | None) -> bool:
 # Request builders
 # --------------------------------------------------------------------------
 
+def _company_name(company: str | None) -> str:
+    """The company for one request: the caller's choice, the selected one, or the policy's pinned one."""
+    from . import policy
+    try:
+        pinned = policy.get().company_for(company)
+    except policy.PolicyError as exc:
+        raise TallyError(str(exc)) from exc
+    if pinned is not None and policy.get().locked:
+        return pinned
+    return company if company is not None else config.get().company
+
+
 def _static_variables(company: str | None, from_date: Any = None, to_date: Any = None,
                       extra: dict[str, str] | None = None) -> str:
     cfg = config.get()
     parts = ["<SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>"]
-    name = company if company is not None else cfg.company
+    name = _company_name(company)
     if name:
         parts.append(f"<SVCURRENTCOMPANY>{escape(name)}</SVCURRENTCOMPANY>")
     if from_date:
@@ -450,8 +462,7 @@ def flat_rows(root: ET.Element) -> list[dict[str, str]]:
 
 def import_xml(payload: str, kind: str, company: str | None = None) -> str:
     """Wrap master / voucher XML in an import envelope. ``kind`` is 'All Masters' or 'Vouchers'."""
-    cfg = config.get()
-    name = company if company is not None else cfg.company
+    name = _company_name(company)
     statics = f"<SVCURRENTCOMPANY>{escape(name)}</SVCURRENTCOMPANY>" if name else ""
     return (
         "<ENVELOPE><HEADER><VERSION>1</VERSION><TALLYREQUEST>Import</TALLYREQUEST>"

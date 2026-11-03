@@ -9,7 +9,7 @@ from rajtally_mcp.server import build_server
 
 SECTIONS = [
     ("Step 1 - Connect", ["tally_guide", "tally_status", "tally_list_companies", "tally_use_company",
-                          "tally_company_info", "tally_settings_read", "tally_settings_update"]),
+                          "tally_company_info", "tally_settings_read", "tally_settings_update", "tally_policy"]),
     ("Step 2 - Look things up", ["tally_search", "tally_list_masters", "tally_get_master",
                                  "tally_list_vouchers", "tally_get_voucher"]),
     ("Step 3 - Reports", ["tally_trial_balance", "tally_balance_sheet", "tally_profit_loss",

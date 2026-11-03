@@ -8,7 +8,7 @@ import socket
 
 import pytest
 
-from rajtally_mcp import config, demo_tally
+from rajtally_mcp import config, demo_tally, policy
 from rajtally_mcp.server import build_server
 
 
@@ -25,13 +25,19 @@ def tally(tmp_path, monkeypatch):
     monkeypatch.setenv("RAJTALLY_SETTINGS", str(tmp_path / "settings.json"))
     monkeypatch.setenv("TALLY_PORT", str(port))
     monkeypatch.setenv("TALLY_HOST", "127.0.0.1")
-    for name in ("TALLY_COMPANY", "TALLY_ACCESS", "TALLY_ENCODING", "TALLY_GST_SCHEMA", "TALLY_ODBC_DSN"):
+    for name in ("TALLY_COMPANY", "TALLY_ACCESS", "TALLY_ENCODING", "TALLY_GST_SCHEMA", "TALLY_ODBC_DSN",
+                 "RAJTALLY_LOCK", "RAJTALLY_COMPANY_GUID", "RAJTALLY_ACCESS_CEILING", "RAJTALLY_TOOL_PROFILE",
+                 "RAJTALLY_ALLOW_TOOLS"):
         monkeypatch.delenv(name, raising=False)
+    # the write tests exercise posting; the product default is read_only (see test_policy.py)
+    monkeypatch.setenv("TALLY_ACCESS", "read_write")
+    policy.reset()
     config.reset()
     server, data = demo_tally.start(port)
     yield data
     server.shutdown()
     server.server_close()
+    policy.reset()
     config.reset()
 
 

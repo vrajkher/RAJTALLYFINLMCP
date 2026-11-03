@@ -6,6 +6,9 @@ Values come from three places, later ones win:
 2. environment variables (``TALLY_HOST`` etc.)
 3. the saved settings file (``~/.rajtally/settings.json``), which is what the
    ``tally_settings_update`` tool writes.
+
+The administrator policy (``policy.py``) caps all three: a locked server ignores the settings file and
+refuses run-time changes to host, port and company, and access never exceeds the policy ceiling.
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ class TallyConfig:
     host: str = "localhost"
     port: int = 9000
     company: str = ""  # blank = whichever company is active in Tally
-    access: str = "read_write"  # read_only | read_write | full (full also allows delete/cancel)
+    access: str = "read_only"  # read_only | read_write | full (full also allows delete/cancel)
     odbc_dsn: str = ""  # blank = build a DSN-less connection string from host/port
     timeout: int = 60  # seconds per request
     encoding: str = "utf-16"  # utf-16 handles Gujarati/Hindi names; utf-8 also accepted
@@ -74,14 +77,27 @@ def _validate(cfg: TallyConfig) -> TallyConfig:
     return cfg
 
 
+LOCKED_FIELDS = ("host", "port", "company", "odbc_dsn")
+
+
+def _apply_policy(cfg: TallyConfig) -> TallyConfig:
+    from . import policy
+    pol = policy.get()
+    if pol.locked:
+        cfg.company = pol.company
+    cfg.access = pol.clamp_access(cfg.access)
+    return cfg
+
+
 def load() -> TallyConfig:
-    """Build the config from defaults, environment and the saved file."""
+    """Build the config from defaults, environment and the saved file, then apply the policy."""
+    from . import policy
     cfg = TallyConfig()
     for name, env in _ENV.items():
         if os.environ.get(env):
             setattr(cfg, name, _coerce(name, os.environ[env]))
     path = settings_path()
-    if path.exists():
+    if path.exists() and not policy.get().locked:
         try:
             saved = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -89,7 +105,7 @@ def load() -> TallyConfig:
         for name in _ENV:
             if name in saved:
                 setattr(cfg, name, _coerce(name, saved[name]))
-    return _validate(cfg)
+    return _apply_policy(_validate(cfg))
 
 
 def get() -> TallyConfig:
@@ -102,15 +118,24 @@ def get() -> TallyConfig:
 
 def update(changes: dict[str, Any], persist: bool = True) -> TallyConfig:
     """Apply changes, validate, and (by default) save them to the settings file."""
+    from . import policy
     global _current
+    pol = policy.get()
     with _lock:
         base = _current or load()
         data = asdict(base)
         for name, value in changes.items():
             if name not in data:
                 raise ValueError(f"Unknown setting: {name}")
-            data[name] = _coerce(name, value)
+            new = _coerce(name, value)
+            if pol.locked and name in LOCKED_FIELDS and new != data[name]:
+                raise ValueError(f"'{name}' is fixed by the administrator policy on this server.")
+            if name == "access" and new in ACCESS_LEVELS and not pol.allows_access(new):
+                raise ValueError(f"Access '{new}' exceeds this server's ceiling '{pol.access_ceiling}'.")
+            data[name] = new
         cfg = _validate(TallyConfig(**data))
+        if pol.locked:
+            persist = False  # a locked server never writes the shared settings file
         if persist:
             path = settings_path()
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -29,9 +29,28 @@ def require_write() -> None:
             "This server is in read_only mode, so nothing was changed in Tally. "
             "To allow changes, set access to 'read_write' with tally_settings_update."
         )
+    verify_pinned_company()
+
+
+def verify_pinned_company() -> None:
+    """Locked servers: immediately before a write, the pinned company must be open (and match its GUID)."""
+    from . import policy
+    pol = policy.get()
+    if not (pol.locked and pol.company):
+        return
+    for element in tx.collection("Company", ["Name", "GUID"], company=""):
+        name = element.get("NAME") or tx.text_of(element, "NAME")
+        if name.lower() == pol.company.lower():
+            guid = tx.text_of(element, "GUID")
+            if pol.company_guid and guid != pol.company_guid:
+                raise TallyError(f"Company '{name}' is open but its GUID does not match this server's policy; "
+                                 "nothing was changed.")
+            return
+    raise TallyError(f"Company '{pol.company}' is not open in Tally; nothing was changed.")
 
 
 def require_full(confirm: bool) -> None:
+    verify_pinned_company()
     if config.get().access != "full":
         raise TallyError(
             "Deleting and cancelling need access = 'full' (current: "

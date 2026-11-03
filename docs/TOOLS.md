@@ -1,6 +1,6 @@
 # Tool reference
 
-All 53 tools, in the order you would use them. Generated from the server itself by `scripts/make_tool_docs.py`.
+All 54 tools, in the order you would use them. Generated from the server itself by `scripts/make_tool_docs.py`.
 
 Every tool also accepts `company` to work on a company other than the selected one, and every write tool accepts `dry_run` to preview without changing anything.
 
@@ -39,6 +39,10 @@ Show the connection settings: Tally host and port, selected company, access leve
 Change connection settings and save them. Pass only what should change inside 'set', e.g. {"set": {"access": "full"}} to allow delete and cancel, {"set": {"port": 9001}}, {"set": {"gstSchema": "erp9"}} for Tally.ERP 9. Keys: host, port, company, access, odbcDsn, timeout, gstSchema.
 
 Arguments: `set`  (`?` = optional)
+
+### `tally_policy`  (read)
+
+The administrator policy this server runs under: locked company, access ceiling and tool profile. Nothing here can be changed through MCP.
 
 ## Step 2 - Look things up
 

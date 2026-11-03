@@ -29,7 +29,7 @@ You:  "Show the GST position for September and list invoices with a wrong GSTIN.
 | **Audit** | Sec 40A(3) cash payments, Sec 269ST cash receipts, negative cash days, duplicate numbers, double-booked supplier bills, round-sum journals, wrong-side balances, master-data health |
 | **Anything else** | ODBC-style `SELECT`, any Tally report by name, custom TDL collections, TDL functions, raw XML |
 
-53 tools in all. The full list with arguments is in [docs/TOOLS.md](docs/TOOLS.md).
+54 tools in all. The full list with arguments is in [docs/TOOLS.md](docs/TOOLS.md).
 
 ---
 
@@ -301,11 +301,11 @@ Your books are protected by three layers:
 
 | Access level | Read | Create and edit | Delete and cancel |
 | --- | --- | --- | --- |
-| `read_only` | Yes | No | No |
-| `read_write` (default) | Yes | Yes | No |
+| `read_only` (default) | Yes | No | No |
+| `read_write` | Yes | Yes | No |
 | `full` | Yes | Yes | Yes, with `confirm: true` |
 
-- Change the level with `tally_settings_update`, or start with `rajtally-mcp --access read_only`.
+- Change the level with `tally_settings_update`, or start with `rajtally-mcp --access read_write`.
 - Every write tool accepts `dry_run: true`.
 - The generic XML tools (`tally_import_xml`, `tally_raw_xml`) inspect what they are given: anything
   that deletes or cancels needs `full` access and an explicit confirmation, however it is spelled.
@@ -313,6 +313,28 @@ Your books are protected by three layers:
   digit. Tally's own error (for example *"Ledger 'X' does not exist!"*) is returned word for word.
 
 **Take a Tally backup before the first write session, and try writes on a test company first.**
+
+### Administrator lock (for offices and embedding apps)
+
+Settings are preferences that the assistant can change. A **policy** is set when the server starts, and
+nothing reachable over MCP can widen it. Use it when staff, or a product such as RAJ Finance Agent,
+should only ever reach one company with a fixed level of access:
+
+```bash
+rajtally-mcp --lock --company "Demo Traders Pvt Ltd" --company-guid <GUID> \
+             --access read_write --access-ceiling read_write --tool-profile post
+```
+
+| Flag | Environment variable | Effect |
+| --- | --- | --- |
+| `--lock` | `RAJTALLY_LOCK=1` | Pins `--company` for every request (a blank or different company name is refused). Ignores the saved settings file. Removes `tally_settings_update` and `tally_use_company` |
+| `--company-guid` | `RAJTALLY_COMPANY_GUID` | Before every write, the open company with the pinned name must have this GUID |
+| `--access-ceiling` | `RAJTALLY_ACCESS_CEILING` | The highest access level any setting can reach |
+| `--tool-profile` | `RAJTALLY_TOOL_PROFILE` | `read`: read tools only. `post`: read tools + `tally_create_voucher`. `write`: everything except delete, cancel and the generic SQL / TDL / XML tools. `all` (default): every tool |
+| `--allow-tools` | `RAJTALLY_ALLOW_TOOLS` | Comma-separated allow-list, applied on top of the profile |
+
+Tools outside the profile are never registered, so a client can neither list nor call them.
+`tally_policy` shows the policy that is in force.
 
 ---
 
@@ -323,7 +345,7 @@ Your books are protected by three layers:
 | `host` | `TALLY_HOST` | `localhost` | Computer running Tally |
 | `port` | `TALLY_PORT` | `9000` | Tally's HTTP port |
 | `company` | `TALLY_COMPANY` | *(blank)* | Exact company name; blank = the company active in Tally |
-| `access` | `TALLY_ACCESS` | `read_write` | `read_only`, `read_write` or `full` |
+| `access` | `TALLY_ACCESS` | `read_only` | `read_only`, `read_write` or `full` (never above the policy ceiling) |
 | `odbcDsn` | `TALLY_ODBC_DSN` | *(auto)* | ODBC data source, e.g. `TallyODBC64_9000` |
 | `timeout` | `TALLY_TIMEOUT` | `60` | Seconds to wait for Tally |
 | `gstSchema` | `TALLY_GST_SCHEMA` | `prime` | `prime` = TallyPrime 3 or later; `erp9` = Tally.ERP 9 / older TallyPrime |
