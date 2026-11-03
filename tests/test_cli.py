@@ -39,7 +39,7 @@ def test_server_works_over_stdio(tally, tmp_path):
             return client.server_info, tools.tools, balance, blocked, guide, ledger
 
     info, tools, balance, blocked, guide, ledger = asyncio.run(run())
-    assert info.name == "rajtally" and len(tools) == 53
+    assert info.name == "rajtally" and len(tools) == 54
     assert balance.structured_content["difference"] == 0.0
     assert blocked.is_error and "read_only mode" in blocked.content[0].text
     assert "STEP 1" in guide.contents[0].text

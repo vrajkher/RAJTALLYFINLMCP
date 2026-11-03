@@ -29,8 +29,9 @@ from openai_mcp_extensions import (
 )
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import __version__, config, core
+from . import __version__, config, core, policy
 from . import tally_xml as tx
+from .tools import READ as READ_ANNOTATION
 from .tools import advanced, compliance, connection, gst, inventory, masters, reports, vouchers
 
 INSTRUCTIONS = (
@@ -165,18 +166,58 @@ def search_mentions(params: OpenAIMentionSearchParams, context: Context[Any, Any
 # Server
 # --------------------------------------------------------------------------
 
+class _PolicyRegistrar:
+    """Passed to each tool module instead of the server: tools the policy does not allow are never
+    registered, so a client cannot list or call them."""
+
+    def __init__(self, mcp: MCPServer, pol: policy.Policy) -> None:
+        self._mcp, self._policy = mcp, pol
+        self.registered: list[str] = []
+
+    def tool(self, *args: Any, **kwargs: Any):
+        annotations = kwargs.get("annotations")
+        read_only = bool(getattr(annotations, "read_only_hint", False))
+        destructive = bool(getattr(annotations, "destructive_hint", False))
+
+        def wrap(fn):
+            name = kwargs.get("name") or fn.__name__
+            if not self._policy.tool_allowed(name, read_only, destructive):
+                return fn
+            self.registered.append(name)
+            return self._mcp.tool(*args, **kwargs)(fn)
+        return wrap
+
+    def __getattr__(self, item: str) -> Any:
+        return getattr(self._mcp, item)
+
+
 def build_server() -> MCPServer:
+    pol = policy.get()
+    config.reset()  # re-read settings under the current policy
+    # A locked server has no settings tools: its connection and ceiling are fixed by whoever started it.
+    extensions = [openai_extensions] if pol.locked else [settings, openai_extensions]
     mcp = MCPServer(
         "rajtally",
         title="RAJ Tally FINL MCP",
-        instructions=INSTRUCTIONS,
+        instructions=INSTRUCTIONS + (f" This server is locked to company '{pol.company}' with tool profile "
+                                     f"'{pol.tool_profile}'." if pol.locked else ""),
         version=__version__,
-        extensions=[settings, openai_extensions],
+        extensions=extensions,
         # lets clients on the older MCP handshake discover the settings capability too
-        middleware=[settings.advertise_legacy_capability],
+        middleware=[] if pol.locked else [settings.advertise_legacy_capability],
     )
+    registrar = _PolicyRegistrar(mcp, pol)
     for module in (connection, masters, vouchers, reports, inventory, gst, compliance, advanced):
-        module.register(mcp)
+        module.register(registrar)
+
+    @registrar.tool(annotations=READ_ANNOTATION)
+    def tally_policy() -> dict[str, Any]:
+        """The administrator policy this server runs under: locked company, access ceiling and tool
+        profile. Nothing here can be changed through MCP."""
+        cfg = config.get()
+        return {"locked": pol.locked, "company": pol.company or None, "company_guid_pinned": bool(pol.company_guid),
+                "access": cfg.access, "access_ceiling": pol.access_ceiling, "tool_profile": pol.tool_profile,
+                "tools": sorted(registrar.registered)}
 
     @mcp.resource("tally://guide", name="Tally MCP guide", mime_type="text/plain",
                   description="Step-by-step map of every tool.")

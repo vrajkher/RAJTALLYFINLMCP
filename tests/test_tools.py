@@ -13,7 +13,7 @@ from conftest import ToolFailed
 
 def test_tool_list_is_complete_and_described(call):
     tools = {t.name: t for t in call.tools()}
-    assert len(tools) == 53
+    assert len(tools) == 54
     assert "confirm" in tools["tally_import_xml"].input_schema["properties"]
     for name, tool in tools.items():
         assert tool.description and len(tool.description) > 30, name
@@ -48,7 +48,7 @@ def test_guide_lists_only_real_tools(call):
     names = {t.name for t in call.tools()}
     mentioned = set(re.findall(r"\btally_[a-z0-9_]+", guide))
     assert mentioned - names == set()
-    assert names - mentioned == {"search_mentions", "tally_guide"}
+    assert names - mentioned == {"search_mentions", "tally_guide", "tally_policy"}
 
 
 # ---------------------------------------------------------------- read

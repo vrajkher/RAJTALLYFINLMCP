@@ -21,15 +21,27 @@ def main() -> None:
     parser.add_argument("--port", type=int, help="Tally port (default 9000)")
     parser.add_argument("--company", help="company name to use")
     parser.add_argument("--access", choices=["read_only", "read_write", "full"], help="access level")
+    parser.add_argument("--lock", action="store_true",
+                        help="administrator lock: pin --company, ignore the settings file, no settings tools")
+    parser.add_argument("--company-guid", help="with --lock: GUID the pinned company must have before any write")
+    parser.add_argument("--access-ceiling", choices=["read_only", "read_write", "full"],
+                        help="highest access level any setting may reach")
+    parser.add_argument("--tool-profile", choices=["read", "post", "write", "all"],
+                        help="register only these tools: read | post (read + create voucher) | write | all")
+    parser.add_argument("--allow-tools", help="comma-separated allow-list, intersected with the profile")
     parser.add_argument("--check", action="store_true", help="test the Tally connection and exit")
     parser.add_argument("--demo", action="store_true", help="run a pretend Tally server for trying things out")
     args = parser.parse_args()
 
     for flag, env in (("host", "TALLY_HOST"), ("port", "TALLY_PORT"), ("company", "TALLY_COMPANY"),
-                      ("access", "TALLY_ACCESS")):
+                      ("access", "TALLY_ACCESS"), ("company_guid", "RAJTALLY_COMPANY_GUID"),
+                      ("access_ceiling", "RAJTALLY_ACCESS_CEILING"), ("tool_profile", "RAJTALLY_TOOL_PROFILE"),
+                      ("allow_tools", "RAJTALLY_ALLOW_TOOLS")):
         value = getattr(args, flag)
         if value is not None:
             os.environ[env] = str(value)
+    if args.lock:
+        os.environ["RAJTALLY_LOCK"] = "1"
 
     if args.demo:
         from .demo_tally import serve
@@ -40,9 +52,14 @@ def main() -> None:
     from .server import build_server
 
     # command-line flags beat the saved settings file for this run
+    from . import policy
+    try:
+        policy.get()
+    except policy.PolicyError as exc:
+        parser.error(str(exc))
     overrides = {flag: getattr(args, flag) for flag in ("host", "port", "company", "access")
                  if getattr(args, flag) is not None}
-    if overrides:
+    if overrides and not policy.get().locked:
         config.update(overrides, persist=False)
 
     if args.check:
